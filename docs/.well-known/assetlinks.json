@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.vikash3ri_beep.twa",
+        "sha256_cert_fingerprints": ["4F:88:4E:6D:BF:4D:30:43:87:14:90:41:F3:EA:1E:E5:B7:0B:9E:B9:66:1F:AA:29:14:A1:7E:75:4B:50:C3:56"]
+      }
+    }]
