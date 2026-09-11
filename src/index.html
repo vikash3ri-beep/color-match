@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Color Match ⭐ - Brain Puzzle</title>
+  
+  <!-- Mobile & PWA meta tags -->
+  <meta name="theme-color" content="#12131C">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  <link rel="apple-touch-icon" href="assets/icon.png">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Fullscreen Particle Canvas -->
+  <canvas id="particle-canvas"></canvas>
+
+  <div class="mobile-container">
+
+    <!-- ====================================================================
+         1. SPLASH SCREEN
+         ==================================================================== -->
+    <div id="screen-splash" class="screen">
+      <div class="splash-logo-wrap">
+        <img src="assets/icon.png" alt="Color Match" class="splash-icon">
+        <h1 class="splash-title">COLOR MATCH <span class="star">⭐</span></h1>
+        <p class="splash-subtitle">Train Your Brain Speed</p>
+        <div class="splash-loader"></div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         2. MAIN MENU SCREEN
+         ==================================================================== -->
+    <div id="screen-menu" class="screen hidden">
+      <div class="menu-header">
+        <h1 class="game-logo">COLOR MATCH <span class="star">⭐</span></h1>
+        <p class="tagline">The Ultimate Stroop Brain Teaser</p>
+      </div>
+
+      <div class="stroop-teaser">
+        <div class="teaser-label">Brain Rule:</div>
+        <div class="teaser-rule">Match the <span class="hl-color">FONT COLOR</span>, NOT the word!</div>
+      </div>
+
+      <div class="menu-actions">
+        <button id="btn-play-menu" class="btn-primary">
+          <span>▶</span> PLAY GAME
+        </button>
+        <button id="btn-high-scores" class="btn-secondary">
+          <span>🏆</span> HIGH SCORES
+        </button>
+        <button id="btn-stats" class="btn-secondary">
+          <span>📊</span> PLAYER STATS
+        </button>
+        <button id="btn-settings" class="btn-secondary">
+          <span>⚙️</span> SETTINGS
+        </button>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         3. GAME SCREEN
+         ==================================================================== -->
+    <div id="screen-game" class="screen hidden">
+      <!-- Top HUD -->
+      <div class="game-topbar">
+        <div class="score-box">
+          <span class="box-label">Score</span>
+          <span id="hud-score" class="score-val">0</span>
+        </div>
+
+        <div id="hud-streak-badge" class="streak-badge hidden">
+          <span id="hud-streak-text">🔥 x3</span>
+        </div>
+
+        <div class="mode-info-box">
+          <!-- Time Attack / Speed timer -->
+          <div id="hud-timer-container">
+            <span id="hud-timer" class="timer-display">1:00</span>
+          </div>
+
+          <!-- Lives mode hearts -->
+          <div id="hud-lives-container" class="hidden">
+            <span id="hud-lives" class="lives-display">❤️ ❤️ ❤️</span>
+          </div>
+
+          <button id="btn-game-exit" class="btn-icon" title="Quit to Menu">✕</button>
+        </div>
+      </div>
+
+      <!-- Lives Mode Round Countdown Bar -->
+      <div class="round-timer-track">
+        <div id="round-timer-progress" class="round-timer-fill"></div>
+      </div>
+
+      <!-- Center Word Card (Stroop Display) -->
+      <div class="word-card-wrap">
+        <span class="instruction-hint">👇 Tap matching font color</span>
+        <div id="word-card" class="word-card">
+          <h2 id="target-word" class="target-word">READY</h2>
+        </div>
+      </div>
+
+      <!-- Dynamic Answer Buttons Grid (3 to 6 buttons) -->
+      <div id="buttons-grid" class="buttons-grid grid-4"></div>
+    </div>
+
+    <!-- ====================================================================
+         4. RESULT / GAME OVER SCREEN
+         ==================================================================== -->
+    <div id="screen-result" class="screen hidden">
+      <div class="result-header">
+        <h2 class="result-title">GAME OVER!</h2>
+        <span id="res-mode-label" class="result-mode-badge">Time Attack</span>
+        <div id="res-new-record" class="new-record-badge hidden">⭐ NEW RECORD! ⭐</div>
+      </div>
+
+      <div class="score-summary-card">
+        <span class="box-label">Your Final Score</span>
+        <div id="res-score" class="final-score-val">0</div>
+        <div class="best-score-row">Personal Best: <span id="res-best">0</span></div>
+
+        <div class="round-stats-grid">
+          <div class="stat-item">
+            <span id="res-accuracy" class="val">0%</span>
+            <span class="lbl">Accuracy</span>
+          </div>
+          <div class="stat-item">
+            <span id="res-max-streak" class="val">0</span>
+            <span class="lbl">Max Streak</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rewarded Ad Callouts -->
+      <div class="rewarded-actions">
+        <button id="btn-reward-life" class="btn-reward hidden">
+          <span>❤️</span> Watch Ad → Get +1 Life!
+        </button>
+        <button id="btn-reward-time" class="btn-reward hidden">
+          <span>⏱️</span> Watch Ad → +15 Secs!
+        </button>
+        <button id="btn-reward-double" class="btn-reward">
+          <span>⭐</span> Watch Ad → Double Score!
+        </button>
+      </div>
+
+      <div class="result-actions">
+        <button id="btn-play-again" class="btn-primary">
+          <span>🔄</span> PLAY AGAIN
+        </button>
+        <button id="btn-share-score" class="btn-secondary">
+          <span>📤</span> SHARE SCORE
+        </button>
+        <button id="btn-result-menu" class="btn-secondary">
+          <span>🏠</span> MAIN MENU
+        </button>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         5. MODALS
+         ==================================================================== -->
+
+    <!-- Mode Selection Modal -->
+    <div id="modal-mode-select" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Select Mode</h2>
+          <button class="btn-icon btn-close-modal">✕</button>
+        </div>
+        <div class="modal-list">
+          <button id="btn-mode-time" class="mode-option-btn">
+            <span class="mode-icon">⏱️</span>
+            <div class="mode-text">
+              <h3>Time Attack</h3>
+              <p>60s timer • +3s bonus every 10 correct</p>
+            </div>
+          </button>
+
+          <button id="btn-mode-lives" class="mode-option-btn">
+            <span class="mode-icon">❤️</span>
+            <div class="mode-text">
+              <h3>Lives Mode</h3>
+              <p>3 lives • Speed & colors increase</p>
+            </div>
+          </button>
+
+          <button id="btn-mode-speed" class="mode-option-btn btn-locked">
+            <span class="mode-icon">⚡</span>
+            <div class="mode-text">
+              <h3>Speed Rush</h3>
+              <p>30s timer • 6 close subtle shades</p>
+            </div>
+            <span id="speed-lock-badge" class="lock-pill">🔒 Locked</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- High Score Modal -->
+    <div id="modal-high-scores" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>🏆 High Scores</h2>
+          <button class="btn-icon btn-close-modal">✕</button>
+        </div>
+        <div class="stats-list">
+          <div class="stats-row">
+            <span class="label">⏱️ Time Attack</span>
+            <span id="hs-time" class="val">0</span>
+          </div>
+          <div class="stats-row">
+            <span class="label">❤️ Lives Mode</span>
+            <span id="hs-lives" class="val">0</span>
+          </div>
+          <div class="stats-row">
+            <span class="label">⚡ Speed Rush</span>
+            <span id="hs-speed" class="val">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Modal -->
+    <div id="modal-stats" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>📊 Player Statistics</h2>
+          <button class="btn-icon btn-close-modal">✕</button>
+        </div>
+        <div class="stats-list">
+          <div class="stats-row">
+            <span class="label">Total Games Played</span>
+            <span id="st-games" class="val">0</span>
+          </div>
+          <div class="stats-row">
+            <span class="label">Total Correct Answers</span>
+            <span id="st-correct" class="val">0</span>
+          </div>
+          <div class="stats-row">
+            <span class="label">Overall Accuracy</span>
+            <span id="st-accuracy" class="val">0%</span>
+          </div>
+          <div class="stats-row">
+            <span class="label">Highest Streak</span>
+            <span id="st-streak" class="val">0</span>
+          </div>
+        </div>
+        <button id="btn-reset-stats" class="btn-secondary" style="color: var(--accent-red); margin-top: 10px;">
+          Reset All Stats
+        </button>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="modal-settings" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>⚙️ Settings</h2>
+          <button class="btn-icon btn-close-modal">✕</button>
+        </div>
+        <div class="modal-list">
+          <div class="setting-row">
+            <span>Sound Effects (SFX)</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-sound" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <span>Background Music (BGM)</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-music" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <span>Vibration / Haptics</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-vibration" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         6. ADMOB MODALS & BANNER
+         ==================================================================== -->
+    <!-- Interstitial Ad Fullscreen Modal -->
+    <div id="ad-interstitial-modal" class="ad-fullscreen-modal hidden">
+      <div class="ad-topbar">
+        <span class="admob-badge">AdMob Interstitial</span>
+        <span id="ad-interstitial-timer" class="ad-timer">Skip in 5s...</span>
+      </div>
+      <div class="ad-body">
+        <div class="ad-creative-box">
+          <div class="ad-logo-icon">🚀</div>
+          <h3>Speed Up Your Mobile</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Enjoy smooth, high-speed gaming without lag!</p>
+        </div>
+      </div>
+      <button id="ad-interstitial-close" class="btn-secondary btn-disabled" disabled>
+        Please wait...
+      </button>
+    </div>
+
+    <!-- Rewarded Video Ad Modal -->
+    <div id="ad-rewarded-modal" class="ad-fullscreen-modal hidden">
+      <div class="ad-topbar">
+        <span class="admob-badge">AdMob Rewarded Video</span>
+        <span id="ad-rewarded-timer" class="ad-timer">Reward in 5s...</span>
+      </div>
+      <div class="ad-body">
+        <div class="ad-creative-box">
+          <div class="ad-logo-icon">🎁</div>
+          <h3 id="ad-rewarded-title">Watching Sponsored Video</h3>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Watch till end to claim your in-game reward.</p>
+        </div>
+      </div>
+      <button id="ad-rewarded-claim" class="btn-primary btn-disabled" disabled>
+        Watching Video...
+      </button>
+    </div>
+
+    <!-- Sticky Bottom Banner Ad (320x50 standard) -->
+    <div id="admob-banner"></div>
+
+    <!-- Floating Feedback Elements -->
+    <div id="game-toast" class="game-toast hidden"></div>
+    <div id="streak-banner" class="streak-banner hidden"></div>
+
+  </div>
+
+  <!-- JavaScript Modules -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
