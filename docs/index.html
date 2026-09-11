@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Color Match ⭐ - Brain Puzzle</title>
+  <title>Color Flow - Connect & Pipe Puzzle</title>
   
   <!-- Mobile & PWA meta tags -->
-  <meta name="theme-color" content="#12131C">
+  <meta name="theme-color" content="#0F111A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
@@ -18,332 +18,275 @@
 </head>
 <body>
 
-  <!-- Fullscreen Particle Canvas -->
-  <canvas id="particle-canvas"></canvas>
+  <!-- Fullscreen Particle Canvas for Confetti -->
+  <canvas id="particles-canvas"></canvas>
 
-  <div class="mobile-container">
+  <div class="app-layout">
 
-    <!-- ====================================================================
-         1. SPLASH SCREEN
-         ==================================================================== -->
-    <div id="screen-splash" class="screen">
-      <div class="splash-logo-wrap">
-        <img src="assets/icon.png" alt="Color Match" class="splash-icon">
-        <h1 class="splash-title">COLOR MATCH <span class="star">⭐</span></h1>
-        <p class="splash-subtitle">Train Your Brain Speed</p>
-        <div class="splash-loader"></div>
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <button id="level-select-btn" class="icon-btn" title="Level Select">
+          <span>📋</span>
+        </button>
+        <div class="level-badge-group">
+          <h1 id="level-title">Level 1</h1>
+          <span id="grid-badge" class="badge badge-subtle">5x5</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div class="stat-pill">
+          <span class="stat-label">TIME</span>
+          <span id="timer-display" class="stat-val">0:00</span>
+        </div>
+        <div class="stat-pill">
+          <span class="stat-label">MOVES</span>
+          <span id="moves-display" class="stat-val">0</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button id="sound-toggle-btn" class="icon-btn" title="Toggle Sound">
+          <span>🔊</span>
+        </button>
+        <button id="settings-btn" class="icon-btn" title="Settings">
+          <span>⚙️</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Flow Progress Sub-Header -->
+    <div class="flow-subbar">
+      <div class="flow-info">
+        <div class="flow-metric">
+          <span class="flow-label">FLOW:</span>
+          <span id="flow-percent" class="flow-val">0%</span>
+        </div>
+        <div class="flow-metric">
+          <span class="flow-label">PIPES:</span>
+          <span id="pipes-status" class="flow-val">0/4</span>
+        </div>
+      </div>
+      <div class="flow-progress-track">
+        <div id="flow-progress-bar" class="flow-progress-fill"></div>
       </div>
     </div>
 
-    <!-- ====================================================================
-         2. MAIN MENU SCREEN
-         ==================================================================== -->
-    <div id="screen-menu" class="screen hidden">
-      <div class="menu-header">
-        <h1 class="game-logo">COLOR MATCH <span class="star">⭐</span></h1>
-        <p class="tagline">The Ultimate Stroop Brain Teaser</p>
+    <!-- Main Game Board Area -->
+    <main class="game-viewport">
+      <div id="canvas-container" class="canvas-wrapper">
+        <canvas id="game-canvas"></canvas>
       </div>
+    </main>
 
-      <div class="stroop-teaser">
-        <div class="teaser-label">Brain Rule:</div>
-        <div class="teaser-rule">Match the <span class="hl-color">FONT COLOR</span>, NOT the word!</div>
-      </div>
-
-      <div class="menu-actions">
-        <button id="btn-play-menu" class="btn-primary">
-          <span>▶</span> PLAY GAME
-        </button>
-        <button id="btn-high-scores" class="btn-secondary">
-          <span>🏆</span> HIGH SCORES
-        </button>
-        <button id="btn-stats" class="btn-secondary">
-          <span>📊</span> PLAYER STATS
-        </button>
-        <button id="btn-settings" class="btn-secondary">
-          <span>⚙️</span> SETTINGS
-        </button>
-      </div>
-    </div>
-
-    <!-- ====================================================================
-         3. GAME SCREEN
-         ==================================================================== -->
-    <div id="screen-game" class="screen hidden">
-      <!-- Top HUD -->
-      <div class="game-topbar">
-        <div class="score-box">
-          <span class="box-label">Score</span>
-          <span id="hud-score" class="score-val">0</span>
-        </div>
-
-        <div id="hud-streak-badge" class="streak-badge hidden">
-          <span id="hud-streak-text">🔥 x3</span>
-        </div>
-
-        <div class="mode-info-box">
-          <!-- Time Attack / Speed timer -->
-          <div id="hud-timer-container">
-            <span id="hud-timer" class="timer-display">1:00</span>
-          </div>
-
-          <!-- Lives mode hearts -->
-          <div id="hud-lives-container" class="hidden">
-            <span id="hud-lives" class="lives-display">❤️ ❤️ ❤️</span>
-          </div>
-
-          <button id="btn-game-exit" class="btn-icon" title="Quit to Menu">✕</button>
-        </div>
-      </div>
-
-      <!-- Lives Mode Round Countdown Bar -->
-      <div class="round-timer-track">
-        <div id="round-timer-progress" class="round-timer-fill"></div>
-      </div>
-
-      <!-- Center Word Card (Stroop Display) -->
-      <div class="word-card-wrap">
-        <span class="instruction-hint">👇 Tap matching font color</span>
-        <div id="word-card" class="word-card">
-          <h2 id="target-word" class="target-word">READY</h2>
-        </div>
-      </div>
-
-      <!-- Dynamic Answer Buttons Grid (3 to 6 buttons) -->
-      <div id="buttons-grid" class="buttons-grid grid-4"></div>
-    </div>
-
-    <!-- ====================================================================
-         4. RESULT / GAME OVER SCREEN
-         ==================================================================== -->
-    <div id="screen-result" class="screen hidden">
-      <div class="result-header">
-        <h2 class="result-title">GAME OVER!</h2>
-        <span id="res-mode-label" class="result-mode-badge">Time Attack</span>
-        <div id="res-new-record" class="new-record-badge hidden">⭐ NEW RECORD! ⭐</div>
-      </div>
-
-      <div class="score-summary-card">
-        <span class="box-label">Your Final Score</span>
-        <div id="res-score" class="final-score-val">0</div>
-        <div class="best-score-row">Personal Best: <span id="res-best">0</span></div>
-
-        <div class="round-stats-grid">
-          <div class="stat-item">
-            <span id="res-accuracy" class="val">0%</span>
-            <span class="lbl">Accuracy</span>
-          </div>
-          <div class="stat-item">
-            <span id="res-max-streak" class="val">0</span>
-            <span class="lbl">Max Streak</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Rewarded Ad Callouts -->
-      <div class="rewarded-actions">
-        <button id="btn-reward-life" class="btn-reward hidden">
-          <span>❤️</span> Watch Ad → Get +1 Life!
-        </button>
-        <button id="btn-reward-time" class="btn-reward hidden">
-          <span>⏱️</span> Watch Ad → +15 Secs!
-        </button>
-        <button id="btn-reward-double" class="btn-reward">
-          <span>⭐</span> Watch Ad → Double Score!
-        </button>
-      </div>
-
-      <div class="result-actions">
-        <button id="btn-play-again" class="btn-primary">
-          <span>🔄</span> PLAY AGAIN
-        </button>
-        <button id="btn-share-score" class="btn-secondary">
-          <span>📤</span> SHARE SCORE
-        </button>
-        <button id="btn-result-menu" class="btn-secondary">
-          <span>🏠</span> MAIN MENU
-        </button>
-      </div>
-    </div>
-
-    <!-- ====================================================================
-         5. MODALS
-         ==================================================================== -->
-
-    <!-- Mode Selection Modal -->
-    <div id="modal-mode-select" class="modal-overlay hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>Select Mode</h2>
-          <button class="btn-icon btn-close-modal">✕</button>
-        </div>
-        <div class="modal-list">
-          <button id="btn-mode-time" class="mode-option-btn">
-            <span class="mode-icon">⏱️</span>
-            <div class="mode-text">
-              <h3>Time Attack</h3>
-              <p>60s timer • +3s bonus every 10 correct</p>
-            </div>
-          </button>
-
-          <button id="btn-mode-lives" class="mode-option-btn">
-            <span class="mode-icon">❤️</span>
-            <div class="mode-text">
-              <h3>Lives Mode</h3>
-              <p>3 lives • Speed & colors increase</p>
-            </div>
-          </button>
-
-          <button id="btn-mode-speed" class="mode-option-btn btn-locked">
-            <span class="mode-icon">⚡</span>
-            <div class="mode-text">
-              <h3>Speed Rush</h3>
-              <p>30s timer • 6 close subtle shades</p>
-            </div>
-            <span id="speed-lock-badge" class="lock-pill">🔒 Locked</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- High Score Modal -->
-    <div id="modal-high-scores" class="modal-overlay hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>🏆 High Scores</h2>
-          <button class="btn-icon btn-close-modal">✕</button>
-        </div>
-        <div class="stats-list">
-          <div class="stats-row">
-            <span class="label">⏱️ Time Attack</span>
-            <span id="hs-time" class="val">0</span>
-          </div>
-          <div class="stats-row">
-            <span class="label">❤️ Lives Mode</span>
-            <span id="hs-lives" class="val">0</span>
-          </div>
-          <div class="stats-row">
-            <span class="label">⚡ Speed Rush</span>
-            <span id="hs-speed" class="val">0</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stats Modal -->
-    <div id="modal-stats" class="modal-overlay hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>📊 Player Statistics</h2>
-          <button class="btn-icon btn-close-modal">✕</button>
-        </div>
-        <div class="stats-list">
-          <div class="stats-row">
-            <span class="label">Total Games Played</span>
-            <span id="st-games" class="val">0</span>
-          </div>
-          <div class="stats-row">
-            <span class="label">Total Correct Answers</span>
-            <span id="st-correct" class="val">0</span>
-          </div>
-          <div class="stats-row">
-            <span class="label">Overall Accuracy</span>
-            <span id="st-accuracy" class="val">0%</span>
-          </div>
-          <div class="stats-row">
-            <span class="label">Highest Streak</span>
-            <span id="st-streak" class="val">0</span>
-          </div>
-        </div>
-        <button id="btn-reset-stats" class="btn-secondary" style="color: var(--accent-red); margin-top: 10px;">
-          Reset All Stats
-        </button>
-      </div>
-    </div>
-
-    <!-- Settings Modal -->
-    <div id="modal-settings" class="modal-overlay hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>⚙️ Settings</h2>
-          <button class="btn-icon btn-close-modal">✕</button>
-        </div>
-        <div class="modal-list">
-          <div class="setting-row">
-            <span>Sound Effects (SFX)</span>
-            <label class="switch">
-              <input type="checkbox" id="toggle-sound" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-row">
-            <span>Background Music (BGM)</span>
-            <label class="switch">
-              <input type="checkbox" id="toggle-music" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-row">
-            <span>Vibration / Haptics</span>
-            <label class="switch">
-              <input type="checkbox" id="toggle-vibration" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ====================================================================
-         6. ADMOB MODALS & BANNER
-         ==================================================================== -->
-    <!-- Interstitial Ad Fullscreen Modal -->
-    <div id="ad-interstitial-modal" class="ad-fullscreen-modal hidden">
-      <div class="ad-topbar">
-        <span class="admob-badge">AdMob Interstitial</span>
-        <span id="ad-interstitial-timer" class="ad-timer">Skip in 5s...</span>
-      </div>
-      <div class="ad-body">
-        <div class="ad-creative-box">
-          <div class="ad-logo-icon">🚀</div>
-          <h3>Speed Up Your Mobile</h3>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">Enjoy smooth, high-speed gaming without lag!</p>
-        </div>
-      </div>
-      <button id="ad-interstitial-close" class="btn-secondary btn-disabled" disabled>
-        Please wait...
+    <!-- Bottom Action Controls -->
+    <footer class="action-bar">
+      <button id="undo-btn" class="action-btn" title="Undo Move">
+        <span class="btn-icon">↩️</span>
+        <span class="btn-text">Undo</span>
       </button>
-    </div>
 
-    <!-- Rewarded Video Ad Modal -->
-    <div id="ad-rewarded-modal" class="ad-fullscreen-modal hidden">
-      <div class="ad-topbar">
-        <span class="admob-badge">AdMob Rewarded Video</span>
-        <span id="ad-rewarded-timer" class="ad-timer">Reward in 5s...</span>
-      </div>
-      <div class="ad-body">
-        <div class="ad-creative-box">
-          <div class="ad-logo-icon">🎁</div>
-          <h3 id="ad-rewarded-title">Watching Sponsored Video</h3>
-          <p style="color: var(--text-muted); font-size: 0.9rem;">Watch till end to claim your in-game reward.</p>
-        </div>
-      </div>
-      <button id="ad-rewarded-claim" class="btn-primary btn-disabled" disabled>
-        Watching Video...
+      <button id="restart-btn" class="action-btn" title="Restart Level">
+        <span class="btn-icon">🔄</span>
+        <span class="btn-text">Restart</span>
       </button>
+
+      <button id="hint-btn" class="action-btn action-btn-highlight" title="Get Hint">
+        <span class="btn-icon">💡</span>
+        <span class="btn-text">Hint</span>
+        <span id="hint-badge" class="badge badge-primary">3</span>
+      </button>
+    </footer>
+
+    <!-- Sticky AdMob Bottom Banner -->
+    <div id="admob-banner" class="admob-banner-slot">
+      <div class="admob-banner-inner">
+        <span class="admob-badge">Ad</span>
+        <span class="admob-sponsor">AdMob by Google</span>
+        <span class="admob-text">🧩 Train your mind with Flow Connect Puzzles!</span>
+      </div>
     </div>
-
-    <!-- Sticky Bottom Banner Ad (320x50 standard) -->
-    <div id="admob-banner"></div>
-
-    <!-- Floating Feedback Elements -->
-    <div id="game-toast" class="game-toast hidden"></div>
-    <div id="streak-banner" class="streak-banner hidden"></div>
 
   </div>
 
-  <!-- JavaScript Modules -->
+  <!-- ====================================================================
+       MODAL 1: LEVEL COMPLETE POPUP
+       ==================================================================== -->
+  <div id="win-modal" class="modal-backdrop hidden">
+    <div class="modal-card win-card animate-pop">
+      <div class="win-header">
+        <div class="win-trophy">🎉</div>
+        <h2 id="win-title" class="win-heading">LEVEL COMPLETE!</h2>
+      </div>
+
+      <!-- Star Rating -->
+      <div id="win-stars-container" class="stars-row">
+        <span class="star-icon earned">★</span>
+        <span class="star-icon earned">★</span>
+        <span class="star-icon earned">★</span>
+      </div>
+
+      <!-- Level Stats -->
+      <div class="win-stats-grid">
+        <div class="win-stat-box">
+          <span class="stat-caption">MOVES</span>
+          <span id="win-moves" class="stat-number">14</span>
+        </div>
+        <div class="win-stat-box">
+          <span class="stat-caption">TIME</span>
+          <span id="win-time" class="stat-number">0:32</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="win-actions">
+        <button id="win-next-btn" class="btn-large btn-glow">
+          <span>▶</span> NEXT LEVEL
+        </button>
+        <div class="btn-row">
+          <button id="win-replay-btn" class="btn-secondary">
+            <span>🔄</span> Replay
+          </button>
+          <button id="win-menu-btn" class="btn-secondary">
+            <span>📋</span> Levels
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL 2: LEVEL SELECT & GRID SIZES
+       ==================================================================== -->
+  <div id="level-select-modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-large animate-slide-up">
+      <div class="modal-header">
+        <h2 class="modal-title">Select Level</h2>
+        <button id="close-level-select-btn" class="close-btn" title="Close">✕</button>
+      </div>
+
+      <!-- Daily Challenge Special Banner -->
+      <div id="daily-challenge-card" class="daily-banner">
+        <div class="daily-left">
+          <span class="daily-badge">⭐ SPECIAL</span>
+          <div class="daily-title">Daily Challenge</div>
+          <div class="daily-sub">New 7x7 puzzle every 24 hours!</div>
+        </div>
+        <button class="btn-play-daily">PLAY</button>
+      </div>
+
+      <!-- Grid Size Selector Tabs -->
+      <div class="grid-tabs-row">
+        <button class="level-tab-btn" data-size="4">4x4</button>
+        <button class="level-tab-btn active" data-size="5">5x5</button>
+        <button class="level-tab-btn" data-size="6">6x6</button>
+        <button class="level-tab-btn" data-size="7">7x7</button>
+        <button class="level-tab-btn" data-size="8">8x8</button>
+        <button class="level-tab-btn" data-size="9">9x9</button>
+      </div>
+
+      <!-- Levels Grid List -->
+      <div id="level-list-container" class="levels-scroll-grid">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL 3: SETTINGS & HOW TO PLAY
+       ==================================================================== -->
+  <div id="settings-modal" class="modal-backdrop hidden">
+    <div class="modal-card animate-pop">
+      <div class="modal-header">
+        <h2 class="modal-title">Settings</h2>
+        <button id="close-settings-btn" class="close-btn" title="Close">✕</button>
+      </div>
+
+      <div class="settings-body">
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-icon">🔊</span> Sound Effects
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sound-setting-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">
+            <span class="setting-icon">📳</span> Haptic Vibration
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="vibration-setting-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="guide-box">
+          <div class="guide-title">How to Play:</div>
+          <ul class="guide-list">
+            <li>🔴 Connect matching colored dots with pipes.</li>
+            <li>🚫 Pipes cannot cross each other.</li>
+            <li>💯 Fill every single tile on the board to complete the level!</li>
+          </ul>
+        </div>
+
+        <button id="reset-progress-btn" class="btn-danger">
+          Clear Progress & Reset
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL 4: REWARDED AD OVERLAY (FOR FREE HINT)
+       ==================================================================== -->
+  <div id="admob-rewarded-modal" class="modal-backdrop hidden">
+    <div class="modal-card ad-card animate-pop">
+      <div class="ad-badge-top">Sponsored Video Ad</div>
+      <div class="ad-video-mock">
+        <div class="ad-icon">🎬</div>
+        <div id="rewarded-notice" class="ad-notice">Watching ad for +1 Free Hint...</div>
+        <div id="rewarded-countdown" class="ad-timer">5s</div>
+      </div>
+      <button id="rewarded-claim-btn" class="btn-large btn-glow" disabled>
+        Reward unlocks in 5s...
+      </button>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL 5: INTERSTITIAL AD OVERLAY
+       ==================================================================== -->
+  <div id="admob-interstitial-modal" class="modal-backdrop hidden">
+    <div class="modal-card ad-card animate-pop">
+      <div class="ad-badge-top">Sponsored Interstitial Ad</div>
+      <div class="ad-video-mock">
+        <div class="ad-icon">⚡</div>
+        <div class="ad-notice">Train Your Brain Daily!</div>
+        <div id="interstitial-countdown" class="ad-timer">Ad closing in 3s...</div>
+      </div>
+      <button id="interstitial-close-btn" class="btn-secondary" style="display: none;">
+        Skip & Continue ➔
+      </button>
+    </div>
+  </div>
+
+  <!-- Bootstrap App Script (ES Module) -->
   <script type="module" src="js/app.js"></script>
+
+  <!-- Offline Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => {
+          console.log('SW registration error:', err);
+        });
+      });
+    }
+  </script>
+
 </body>
 </html>

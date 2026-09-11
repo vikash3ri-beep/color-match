@@ -1,47 +1,91 @@
-// Automated unit test for Color Match logic
-async function runTests() {
-  const { BASE_COLORS, CLOSE_SHADES, generateStroopRound } = await import('./src/js/colors.js');
+/**
+ * Comprehensive test suite for Color Match Connect
+ */
 
-  console.log('Testing Color Match logic...');
-  console.log(`Base colors count: ${BASE_COLORS.length}`);
-  console.log(`Close shades count: ${CLOSE_SHADES.length}`);
+import { generateFlowLevel, getLevelConfig, getCustomGridConfig } from './src/js/generator.js';
+import { FlowGame } from './src/js/game.js';
 
-  // Test 50 rounds of Time Attack
-  for (let i = 0; i < 50; i++) {
-    const round = generateStroopRound({ mode: 'timeAttack', level: i + 1 });
-    if (!round.wordText || !round.fontColor || !round.correctId) {
-      throw new Error(`Invalid round generated at step ${i}`);
+console.log('🧪 Starting Color Match Connect Test Suite...\n');
+
+// 1. Test Procedural Generation
+console.log('--- TEST 1: Procedural Generator (Multiple Sizes & Seeds) ---');
+const testSizes = [
+  { size: 4, colors: 3 },
+  { size: 5, colors: 4 },
+  { size: 6, colors: 5 },
+  { size: 7, colors: 6 },
+  { size: 8, colors: 7 },
+  { size: 9, colors: 8 }
+];
+
+for (const { size, colors } of testSizes) {
+  for (let s = 1; s <= 10; s++) {
+    const level = generateFlowLevel({ width: size, height: size, numColors: colors, seed: s * 100 });
+    if (level.pipes.length !== colors) {
+      throw new Error(`Size ${size}x${size} expected ${colors} pipes, got ${level.pipes.length}`);
     }
-    if (round.options.length !== 4) {
-      throw new Error(`Expected 4 buttons in time attack, got ${round.options.length}`);
-    }
-    const hasCorrect = round.options.some(opt => opt.id === round.correctId);
-    if (!hasCorrect) {
-      throw new Error(`Target color ${round.correctId} not in options list!`);
+    let totalLen = 0;
+    level.pipes.forEach(p => {
+      totalLen += p.length;
+      if (p.length < 3) throw new Error(`Pipe too short: ${p.length}`);
+      if (p.solutionPath.length !== p.length) throw new Error('Solution path length mismatch');
+    });
+    if (totalLen !== size * size) {
+      throw new Error(`Size ${size}x${size} total coverage ${totalLen} != ${size * size}`);
     }
   }
-  console.log('✅ 50 Time Attack rounds verified successfully.');
-
-  // Test Lives Mode scaling
-  const r1 = generateStroopRound({ mode: 'livesMode', level: 5 });
-  if (r1.options.length !== 3) throw new Error(`Level 5 should have 3 buttons, got ${r1.options.length}`);
-
-  const r2 = generateStroopRound({ mode: 'livesMode', level: 15 });
-  if (r2.options.length !== 4) throw new Error(`Level 15 should have 4 buttons, got ${r2.options.length}`);
-
-  const r3 = generateStroopRound({ mode: 'livesMode', level: 80 });
-  if (r3.options.length !== 6) throw new Error(`Level 80 should have 6 buttons, got ${r3.options.length}`);
-  console.log('✅ Lives Mode difficulty scaling verified successfully.');
-
-  // Test Speed Rush
-  const sr = generateStroopRound({ mode: 'speedRush', level: 1 });
-  if (sr.options.length !== 6) throw new Error(`Speed Rush should have 6 buttons, got ${sr.options.length}`);
-  console.log('✅ Speed Rush 6-button configuration verified successfully.');
-
-  console.log('🎉 ALL GAME LOGIC TESTS PASSED!');
+  console.log(`✅ ${size}x${size} (${colors} colors): 10 random seeds 100% board fill verified`);
 }
 
-runTests().catch(err => {
-  console.error('❌ Test failed:', err);
-  process.exit(1);
+// 2. Test Deterministic Reproducibility
+console.log('\n--- TEST 2: Deterministic Reproducibility ---');
+const lvlA = generateFlowLevel({ width: 6, height: 6, numColors: 5, seed: 99999 });
+const lvlB = generateFlowLevel({ width: 6, height: 6, numColors: 5, seed: 99999 });
+if (JSON.stringify(lvlA.pipes) !== JSON.stringify(lvlB.pipes)) {
+  throw new Error('Deterministic PRNG failed: same seed gave different levels!');
+}
+console.log('✅ Deterministic seed matching verified');
+
+// 3. Test FlowGame Core Mechanics
+console.log('\n--- TEST 3: FlowGame Mechanics & Win Condition ---');
+let won = false;
+let starsEarned = 0;
+const game = new FlowGame({
+  onLevelComplete: (res) => {
+    won = true;
+    starsEarned = res.stars;
+  }
 });
+
+const cfg = getLevelConfig(5); // Level 5
+game.loadLevel(cfg);
+
+console.log(`Loaded Level 5: ${game.width}x${game.height} with ${game.numColors} colors`);
+
+// Apply hints to solve each color
+for (let c = 1; c <= game.numColors; c++) {
+  const hint = game.applyHint();
+  console.log(`  Color ${hint.colorId} solved via hint (length: ${hint.path.length})`);
+}
+
+if (!won) throw new Error('Level did not win after full hint solution!');
+if (starsEarned !== 3) throw new Error(`Expected 3 stars for optimal hint solve, got ${starsEarned}`);
+console.log(`✅ Win condition met with 100% board coverage and ${starsEarned} stars!`);
+
+// 4. Test Undo Functionality
+console.log('\n--- TEST 4: Undo and Restart ---');
+game.loadLevel(getLevelConfig(1));
+const ep = game.levelData.pipes[0].start;
+game.startDraw(ep.r, ep.c);
+game.continueDraw(ep.r + (ep.r === 0 ? 1 : -1), ep.c);
+game.endDraw();
+
+const pathBefore = game.playerPaths.get(1).length;
+game.undo();
+const pathAfter = game.playerPaths.get(1).length;
+if (pathBefore <= pathAfter) {
+  throw new Error(`Undo failed: length before ${pathBefore}, after ${pathAfter}`);
+}
+console.log('✅ Undo functionality verified');
+
+console.log('\n🎉 ALL TESTS PASSED SUCCESSFULLY! 100% ACCURACY AND ROBUSTNESS VERIFIED.');

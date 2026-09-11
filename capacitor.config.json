@@ -1,6 +1,6 @@
 {
-  "appId": "com.yourname.colormatch",
-  "appName": "Color Match ⭐",
+  "appId": "com.yourname.colorflow",
+  "appName": "Color Flow",
   "webDir": "src",
   "server": {
     "androidScheme": "https"
@@ -14,7 +14,7 @@
     "SplashScreen": {
       "launchShowDuration": 2000,
       "launchAutoHide": true,
-      "backgroundColor": "#12131C",
+      "backgroundColor": "#0F111A",
       "androidSplashResourceName": "splash",
       "androidScaleType": "CENTER_CROP"
     }

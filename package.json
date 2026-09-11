@@ -1,7 +1,7 @@
 {
-  "name": "color-match",
+  "name": "color-flow",
   "version": "1.0.0",
-  "description": "Color Match ⭐ - Brain Puzzle Game for Android",
+  "description": "Color Flow - Pipe & Connect Puzzle Game for Android",
   "main": "server.js",
   "type": "module",
   "scripts": {

@@ -1,22 +1,24 @@
 {
-  "name": "Color Match ⭐ - Brain Puzzle",
-  "short_name": "Color Match ⭐",
+  "name": "Color Flow: Connect Puzzle",
+  "short_name": "Color Flow",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#12131C",
-  "theme_color": "#1E2235",
-  "description": "Match the COLOR of the text, not the word itself! Addictive Stroop-effect brain puzzle game.",
+  "background_color": "#0F111A",
+  "theme_color": "#161926",
+  "description": "Connect matching color dots with smooth pipes and fill the entire board. Unlimited procedural levels!",
   "icons": [
     {
       "src": "assets/icon.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "assets/icon.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

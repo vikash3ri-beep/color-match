@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Color Match ⭐</string>
-    <string name="title_activity_main">Color Match ⭐</string>
-    <string name="package_name">com.yourname.colormatch</string>
-    <string name="custom_url_scheme">com.yourname.colormatch</string>
+    <string name="app_name">Color Flow</string>
+    <string name="title_activity_main">Color Flow</string>
+    <string name="package_name">com.yourname.colorflow</string>
+    <string name="custom_url_scheme">com.yourname.colorflow</string>
 </resources>

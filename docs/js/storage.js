@@ -1,19 +1,17 @@
-// LocalStorage data management for Color Match ⭐
-// Persists high scores, user stats, settings, and unlockables
+/**
+ * storage.js - LocalStorage data management for Color Match Connect
+ * Persists campaign progression, star ratings, best moves/time, and settings
+ */
 
 const STORAGE_KEYS = {
-  HIGH_SCORE_TIME: 'cm_highScore_timeAttack',
-  HIGH_SCORE_LIVES: 'cm_highScore_livesMode',
-  HIGH_SCORE_SPEED: 'cm_highScore_speedRush',
-  TOTAL_GAMES: 'cm_totalGamesPlayed',
-  TOTAL_CORRECT: 'cm_totalCorrectAnswers',
-  TOTAL_WRONG: 'cm_totalWrongAnswers',
-  HIGHEST_STREAK: 'cm_highestStreak',
-  SOUND_ENABLED: 'cm_soundEnabled',
-  MUSIC_ENABLED: 'cm_musicEnabled',
-  VIBRATION_ENABLED: 'cm_vibrationEnabled',
-  AD_FREE: 'cm_adFreePurchased',
-  SPEED_RUSH_UNLOCKED: 'cm_speedRushUnlocked'
+  CAMPAIGN_PROGRESS: 'cmc_campaign_progress', // JSON: { [levelIndex]: { stars, moves, time } }
+  MAX_UNLOCKED_LEVEL: 'cmc_max_unlocked_level',
+  CUSTOM_PROGRESS: 'cmc_custom_progress',     // JSON: { [key]: { stars, moves, time } }
+  DAILY_CHALLENGES: 'cmc_daily_completed',    // Array of date strings: ['2026-09-11']
+  HINT_TOKENS: 'cmc_hint_tokens',
+  SOUND_ENABLED: 'cmc_sound_enabled',
+  VIBRATION_ENABLED: 'cmc_vibration_enabled',
+  TOTAL_SOLVED: 'cmc_total_solved'
 };
 
 class StorageManager {
@@ -25,111 +23,131 @@ class StorageManager {
     if (localStorage.getItem(STORAGE_KEYS.SOUND_ENABLED) === null) {
       localStorage.setItem(STORAGE_KEYS.SOUND_ENABLED, 'true');
     }
-    if (localStorage.getItem(STORAGE_KEYS.MUSIC_ENABLED) === null) {
-      localStorage.setItem(STORAGE_KEYS.MUSIC_ENABLED, 'true');
-    }
     if (localStorage.getItem(STORAGE_KEYS.VIBRATION_ENABLED) === null) {
       localStorage.setItem(STORAGE_KEYS.VIBRATION_ENABLED, 'true');
     }
+    if (localStorage.getItem(STORAGE_KEYS.MAX_UNLOCKED_LEVEL) === null) {
+      localStorage.setItem(STORAGE_KEYS.MAX_UNLOCKED_LEVEL, '1');
+    }
+    if (localStorage.getItem(STORAGE_KEYS.HINT_TOKENS) === null) {
+      localStorage.setItem(STORAGE_KEYS.HINT_TOKENS, '3'); // Start with 3 free hints
+    }
   }
 
-  getHighScore(mode) {
-    let key;
-    if (mode === 'livesMode') key = STORAGE_KEYS.HIGH_SCORE_LIVES;
-    else if (mode === 'speedRush') key = STORAGE_KEYS.HIGH_SCORE_SPEED;
-    else key = STORAGE_KEYS.HIGH_SCORE_TIME;
-
-    return parseInt(localStorage.getItem(key) || '0', 10);
+  getMaxUnlockedLevel() {
+    return parseInt(localStorage.getItem(STORAGE_KEYS.MAX_UNLOCKED_LEVEL) || '1', 10);
   }
 
-  setHighScore(mode, score) {
-    let key;
-    if (mode === 'livesMode') key = STORAGE_KEYS.HIGH_SCORE_LIVES;
-    else if (mode === 'speedRush') key = STORAGE_KEYS.HIGH_SCORE_SPEED;
-    else key = STORAGE_KEYS.HIGH_SCORE_TIME;
+  unlockNextLevel(completedLevel) {
+    const currentMax = this.getMaxUnlockedLevel();
+    if (completedLevel >= currentMax) {
+      localStorage.setItem(STORAGE_KEYS.MAX_UNLOCKED_LEVEL, (completedLevel + 1).toString());
+    }
+  }
 
-    const currentBest = this.getHighScore(mode);
-    if (score > currentBest) {
-      localStorage.setItem(key, score.toString());
-      return true; // New record
+  getLevelRecord(levelIndex) {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEYS.CAMPAIGN_PROGRESS) || '{}');
+      return data[levelIndex] || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  saveLevelRecord(levelIndex, { stars = 3, moves = 0, time = 0 }) {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEYS.CAMPAIGN_PROGRESS) || '{}');
+      const existing = data[levelIndex];
+
+      const record = {
+        stars: Math.max(existing?.stars || 0, stars),
+        moves: existing?.moves ? Math.min(existing.moves, moves) : moves,
+        time: existing?.time ? Math.min(existing.time, time) : time,
+        completedAt: Date.now()
+      };
+
+      data[levelIndex] = record;
+      localStorage.setItem(STORAGE_KEYS.CAMPAIGN_PROGRESS, JSON.stringify(data));
+
+      this.unlockNextLevel(levelIndex);
+
+      const totalSolved = parseInt(localStorage.getItem(STORAGE_KEYS.TOTAL_SOLVED) || '0', 10);
+      localStorage.setItem(STORAGE_KEYS.TOTAL_SOLVED, (totalSolved + 1).toString());
+
+      return record;
+    } catch (e) {
+      console.error('Failed to save level record', e);
+      return null;
+    }
+  }
+
+  getDailyCompletedToday() {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const completed = JSON.parse(localStorage.getItem(STORAGE_KEYS.DAILY_CHALLENGES) || '[]');
+      return completed.includes(todayStr);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  markDailyCompletedToday() {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const completed = JSON.parse(localStorage.getItem(STORAGE_KEYS.DAILY_CHALLENGES) || '[]');
+      if (!completed.includes(todayStr)) {
+        completed.push(todayStr);
+        localStorage.setItem(STORAGE_KEYS.DAILY_CHALLENGES, JSON.stringify(completed));
+      }
+    } catch (_) {}
+  }
+
+  getHintTokens() {
+    return parseInt(localStorage.getItem(STORAGE_KEYS.HINT_TOKENS) || '0', 10);
+  }
+
+  addHintTokens(count = 1) {
+    const current = this.getHintTokens();
+    const updated = current + count;
+    localStorage.setItem(STORAGE_KEYS.HINT_TOKENS, updated.toString());
+    return updated;
+  }
+
+  consumeHintToken() {
+    const current = this.getHintTokens();
+    if (current > 0) {
+      localStorage.setItem(STORAGE_KEYS.HINT_TOKENS, (current - 1).toString());
+      return true;
     }
     return false;
   }
 
-  getStats() {
-    const totalGames = parseInt(localStorage.getItem(STORAGE_KEYS.TOTAL_GAMES) || '0', 10);
-    const totalCorrect = parseInt(localStorage.getItem(STORAGE_KEYS.TOTAL_CORRECT) || '0', 10);
-    const totalWrong = parseInt(localStorage.getItem(STORAGE_KEYS.TOTAL_WRONG) || '0', 10);
-    const bestStreak = parseInt(localStorage.getItem(STORAGE_KEYS.HIGHEST_STREAK) || '0', 10);
-    const totalAnswers = totalCorrect + totalWrong;
-    const accuracy = totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0;
-
-    return {
-      totalGames,
-      totalCorrect,
-      totalWrong,
-      bestStreak,
-      accuracy,
-      highScores: {
-        timeAttack: this.getHighScore('timeAttack'),
-        livesMode: this.getHighScore('livesMode'),
-        speedRush: this.getHighScore('speedRush')
-      }
-    };
-  }
-
-  recordGameStats({ mode, score, correct, wrong, streak }) {
-    const totalGames = parseInt(localStorage.getItem(STORAGE_KEYS.TOTAL_GAMES) || '0', 10) + 1;
-    const totalCorrect = parseInt(localStorage.getItem(STORAGE_KEYS.TOTAL_CORRECT) || '0', 10) + correct;
-    const totalWrong = parseInt(localStorage.getItem(STORAGE_KEYS.TOTAL_WRONG) || '0', 10) + wrong;
-    const currentBestStreak = parseInt(localStorage.getItem(STORAGE_KEYS.HIGHEST_STREAK) || '0', 10);
-    const bestStreak = Math.max(currentBestStreak, streak);
-
-    localStorage.setItem(STORAGE_KEYS.TOTAL_GAMES, totalGames.toString());
-    localStorage.setItem(STORAGE_KEYS.TOTAL_CORRECT, totalCorrect.toString());
-    localStorage.setItem(STORAGE_KEYS.TOTAL_WRONG, totalWrong.toString());
-    localStorage.setItem(STORAGE_KEYS.HIGHEST_STREAK, bestStreak.toString());
-
-    // Unlock Speed rush if reached score 40 or streak 8
-    if (score >= 40 || streak >= 8) {
-      localStorage.setItem(STORAGE_KEYS.SPEED_RUSH_UNLOCKED, 'true');
-    }
-
-    const isNewHigh = this.setHighScore(mode, score);
-    return { isNewHigh, bestStreak };
-  }
-
-  isSpeedRushUnlocked() {
-    return localStorage.getItem(STORAGE_KEYS.SPEED_RUSH_UNLOCKED) === 'true';
-  }
-
   getSettings() {
     return {
-      soundEnabled: localStorage.getItem(STORAGE_KEYS.SOUND_ENABLED) !== 'false',
-      musicEnabled: localStorage.getItem(STORAGE_KEYS.MUSIC_ENABLED) !== 'false',
-      vibrationEnabled: localStorage.getItem(STORAGE_KEYS.VIBRATION_ENABLED) !== 'false',
-      adFreePurchased: localStorage.getItem(STORAGE_KEYS.AD_FREE) === 'true'
+      sound: localStorage.getItem(STORAGE_KEYS.SOUND_ENABLED) !== 'false',
+      vibration: localStorage.getItem(STORAGE_KEYS.VIBRATION_ENABLED) !== 'false'
     };
   }
 
-  saveSettings({ soundEnabled, musicEnabled, vibrationEnabled, adFreePurchased }) {
-    if (soundEnabled !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.SOUND_ENABLED, soundEnabled ? 'true' : 'false');
-    }
-    if (musicEnabled !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.MUSIC_ENABLED, musicEnabled ? 'true' : 'false');
-    }
-    if (vibrationEnabled !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.VIBRATION_ENABLED, vibrationEnabled ? 'true' : 'false');
-    }
-    if (adFreePurchased !== undefined) {
-      localStorage.setItem(STORAGE_KEYS.AD_FREE, adFreePurchased ? 'true' : 'false');
+  setSetting(key, val) {
+    if (key === 'sound') {
+      localStorage.setItem(STORAGE_KEYS.SOUND_ENABLED, val ? 'true' : 'false');
+    } else if (key === 'vibration') {
+      localStorage.setItem(STORAGE_KEYS.VIBRATION_ENABLED, val ? 'true' : 'false');
     }
   }
 
-  resetAll() {
-    localStorage.clear();
-    this.initDefaults();
+  getTotalStars() {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEYS.CAMPAIGN_PROGRESS) || '{}');
+      let total = 0;
+      for (const key in data) {
+        total += data[key]?.stars || 0;
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
   }
 }
 

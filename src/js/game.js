@@ -1,352 +1,496 @@
-// Core Game Engine for Color Match ⭐
-// Implements Time Attack, Lives Mode, and Speed Rush with Stroop Effect mechanics
+/**
+ * game.js - Core Logic & State Management for Color Match Connect (Flow Free Puzzle)
+ */
 
-import { generateStroopRound } from './colors.js';
-import { soundManager } from './audio.js';
-import { storageManager } from './storage.js';
-import { particleEngine } from './particles.js';
-import { adManager } from './ads.js';
+import { generateFlowLevel, getLevelConfig, getCustomGridConfig, getPaletteColor } from './generator.js';
 
-export const GAME_MODES = {
-  TIME_ATTACK: 'timeAttack',
-  LIVES_MODE: 'livesMode',
-  SPEED_RUSH: 'speedRush'
-};
+export class FlowGame {
+  constructor(options = {}) {
+    this.options = options;
+    this.width = 5;
+    this.height = 5;
+    this.numColors = 4;
+    this.levelConfig = null;
+    this.levelData = null;
 
-export class GameEngine {
-  constructor(uiCallbacks) {
-    this.ui = uiCallbacks;
-    this.mode = GAME_MODES.TIME_ATTACK;
-    this.state = 'IDLE'; // IDLE | PLAYING | PAUSED | GAMEOVER
+    // Board structures
+    this.initialGrid = []; // [r][c] = colorId if endpoint, else 0
+    this.endpoints = new Map(); // colorId -> [ {r, c}, {r, c} ]
+    this.playerPaths = new Map(); // colorId -> [ {r, c}, ... ]
+    this.solutionPaths = new Map(); // colorId -> [ {r, c}, ... ]
+    this.connectedColors = new Set(); // set of colorIds fully connected
 
-    this.score = 0;
-    this.streak = 0;
-    this.maxStreak = 0;
-    this.correctCount = 0;
-    this.wrongCount = 0;
-    this.level = 1;
-
-    // Mode-specific variables
-    this.timeRemaining = 60; // seconds
+    // Gameplay statistics
+    this.moves = 0;
+    this.startTime = 0;
+    this.elapsedSeconds = 0;
     this.timerInterval = null;
-    this.lives = 3;
+    this.isCompleted = false;
+    this.undoStack = [];
 
-    // Round countdown for Lives Mode
-    this.roundTimeRemaining = 3.0;
-    this.roundTimerInterval = null;
-    this.currentRound = null;
+    // Active drag session
+    this.activeDrag = null; // { colorId, path: [{r, c}] }
+
+    // Event callbacks
+    this.onStateChange = options.onStateChange || (() => {});
+    this.onColorConnected = options.onColorConnected || (() => {});
+    this.onColorDisconnected = options.onColorDisconnected || (() => {});
+    this.onCellStep = options.onCellStep || (() => {});
+    this.onPipeBroken = options.onPipeBroken || (() => {});
+    this.onLevelComplete = options.onLevelComplete || (() => {});
   }
 
-  start(mode = GAME_MODES.TIME_ATTACK) {
-    this.mode = mode;
-    this.state = 'PLAYING';
-    this.score = 0;
-    this.streak = 0;
-    this.maxStreak = 0;
-    this.correctCount = 0;
-    this.wrongCount = 0;
-    this.level = 1;
-    this.lives = 3;
+  /**
+   * Load and initialize a new level
+   */
+  loadLevel(config) {
+    this.stopTimer();
+    this.levelConfig = config;
+    this.levelData = generateFlowLevel(config);
 
-    adManager.resetGameSession();
+    this.width = this.levelData.width;
+    this.height = this.levelData.height;
+    this.numColors = this.levelData.numColors;
+    this.initialGrid = this.levelData.initialGrid;
 
-    if (this.mode === GAME_MODES.TIME_ATTACK) {
-      this.timeRemaining = 60;
-      this.startMainTimer();
-    } else if (this.mode === GAME_MODES.SPEED_RUSH) {
-      this.timeRemaining = 30;
-      this.startMainTimer();
-    } else if (this.mode === GAME_MODES.LIVES_MODE) {
-      this.lives = 3;
-    }
+    this.endpoints.clear();
+    this.playerPaths.clear();
+    this.solutionPaths.clear();
+    this.connectedColors.clear();
+    this.undoStack = [];
 
-    this.ui.onGameStart({
-      mode: this.mode,
-      lives: this.lives,
-      time: this.timeRemaining,
-      score: this.score,
-      streak: this.streak
+    this.levelData.pipes.forEach(pipe => {
+      this.endpoints.set(pipe.colorId, [pipe.start, pipe.end]);
+      this.solutionPaths.set(pipe.colorId, pipe.solutionPath);
+      this.playerPaths.set(pipe.colorId, []);
     });
 
-    this.nextRound();
+    this.moves = 0;
+    this.elapsedSeconds = 0;
+    this.isCompleted = false;
+    this.activeDrag = null;
+
+    this.startTimer();
+    this.notifyState();
   }
 
-  startMainTimer() {
-    this.stopMainTimer();
+  startTimer() {
+    this.stopTimer();
+    this.startTime = Date.now() - (this.elapsedSeconds * 1000);
     this.timerInterval = setInterval(() => {
-      if (this.state !== 'PLAYING') return;
-
-      this.timeRemaining--;
-      const isUrgent = this.timeRemaining <= 10;
-      if (isUrgent && this.timeRemaining > 0) {
-        soundManager.playTimerTick(true);
+      if (!this.isCompleted) {
+        this.elapsedSeconds = Math.floor((Date.now() - this.startTime) / 1000);
+        this.onStateChange(this.getSummary());
       }
-
-      this.ui.onTimerTick(this.timeRemaining, isUrgent);
-
-      if (this.timeRemaining <= 0) {
-        this.stopMainTimer();
-        this.gameOver('Time is up!');
-      }
-    }, 1000);
+    }, 500);
   }
 
-  stopMainTimer() {
+  stopTimer() {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
   }
 
-  // Round timer for Lives Mode (difficulty scaling)
-  startRoundTimer() {
-    this.stopRoundTimer();
-    if (this.mode !== GAME_MODES.LIVES_MODE) return;
+  /**
+   * Snapshot current paths for undo
+   */
+  pushUndo() {
+    const snapshot = {};
+    for (const [colorId, path] of this.playerPaths.entries()) {
+      snapshot[colorId] = path.map(pt => ({ r: pt.r, c: pt.c }));
+    }
+    this.undoStack.push(snapshot);
+    if (this.undoStack.length > 50) this.undoStack.shift();
+  }
 
-    // Difficulty table based on GDD
-    let limitSec = 3.0;
-    if (this.level > 75) limitSec = 1.0;
-    else if (this.level > 50) limitSec = 1.5;
-    else if (this.level > 25) limitSec = 2.0;
-    else if (this.level > 10) limitSec = 2.5;
+  undo() {
+    if (this.isCompleted || this.undoStack.length === 0) return false;
+    const previous = this.undoStack.pop();
+    this.playerPaths.clear();
+    for (const colorIdStr in previous) {
+      const colorId = Number(colorIdStr);
+      this.playerPaths.set(colorId, previous[colorId]);
+    }
+    this.updateConnections();
+    this.notifyState();
+    return true;
+  }
 
-    this.roundTimeRemaining = limitSec;
-    const updateFreqMs = 50;
-    const decrement = updateFreqMs / 1000;
+  restart() {
+    if (this.isCompleted) return;
+    this.pushUndo();
+    this.playerPaths.forEach((_, colorId) => {
+      this.playerPaths.set(colorId, []);
+    });
+    this.connectedColors.clear();
+    this.moves = 0;
+    this.elapsedSeconds = 0;
+    this.startTime = Date.now();
+    this.notifyState();
+  }
 
-    this.ui.onRoundTimerUpdate(1.0); // 100% full bar
+  /**
+   * Check if a cell is an endpoint of any color
+   */
+  getEndpointColor(r, c) {
+    if (r < 0 || r >= this.height || c < 0 || c >= this.width) return 0;
+    return this.initialGrid[r][c];
+  }
 
-    this.roundTimerInterval = setInterval(() => {
-      if (this.state !== 'PLAYING') return;
-
-      this.roundTimeRemaining -= decrement;
-      const progress = Math.max(0, this.roundTimeRemaining / limitSec);
-      this.ui.onRoundTimerUpdate(progress);
-
-      if (this.roundTimeRemaining <= 0) {
-        this.stopRoundTimer();
-        this.handleTimeout();
+  /**
+   * Check which color path currently occupies a cell
+   */
+  getPathOccupant(r, c) {
+    for (const [colorId, path] of this.playerPaths.entries()) {
+      for (let i = 0; i < path.length; i++) {
+        if (path[i].r === r && path[i].c === c) {
+          return { colorId, index: i, total: path.length };
+        }
       }
-    }, updateFreqMs);
+    }
+    return null;
   }
 
-  stopRoundTimer() {
-    if (this.roundTimerInterval) {
-      clearInterval(this.roundTimerInterval);
-      this.roundTimerInterval = null;
-    }
-  }
+  /**
+   * Begins user drawing drag gesture at (r, c)
+   */
+  startDraw(r, c) {
+    if (this.isCompleted) return null;
+    if (r < 0 || r >= this.height || c < 0 || c >= this.width) return null;
 
-  handleTimeout() {
-    this.handleWrongAnswer(null, true);
-  }
+    const endpointColor = this.getEndpointColor(r, c);
+    const occupant = this.getPathOccupant(r, c);
 
-  nextRound() {
-    if (this.state !== 'PLAYING') return;
+    let targetColor = 0;
+    let initialPath = [];
 
-    this.currentRound = generateStroopRound({
-      mode: this.mode,
-      level: this.level
-    });
-
-    this.ui.onNewRound(this.currentRound);
-    this.startRoundTimer();
-  }
-
-  handleAnswer(selectedColorId, clickEvent) {
-    if (this.state !== 'PLAYING') return;
-    if (!this.currentRound) return;
-
-    const isCorrect = (selectedColorId === this.currentRound.correctId);
-    const clickX = clickEvent?.clientX || window.innerWidth / 2;
-    const clickY = clickEvent?.clientY || window.innerHeight / 2;
-
-    if (isCorrect) {
-      this.handleCorrectAnswer(clickX, clickY);
-    } else {
-      this.handleWrongAnswer(clickEvent);
-    }
-  }
-
-  handleCorrectAnswer(clickX, clickY) {
-    this.correctCount++;
-    this.streak++;
-    this.level++;
-    if (this.streak > this.maxStreak) {
-      this.maxStreak = this.streak;
-    }
-
-    // Scoring math
-    let pointsEarned = 10;
-    let streakBonus = 0;
-
-    if (this.streak >= 10) {
-      streakBonus = 50;
-    } else if (this.streak >= 5) {
-      streakBonus = 15;
-    } else if (this.streak >= 3) {
-      streakBonus = 5;
-    }
-
-    pointsEarned += streakBonus;
-    this.score += pointsEarned;
-
-    // Sound & particles
-    if (streakBonus > 0 && (this.streak === 3 || this.streak === 5 || this.streak === 10 || this.streak % 5 === 0)) {
-      soundManager.playStreak(this.streak);
-      particleEngine.spawnStreakBurst(clickX, clickY);
-      this.ui.showStreakBanner(this.streak, streakBonus);
-    } else {
-      soundManager.playCorrect();
-    }
-
-    particleEngine.spawnTapBurst(clickX, clickY, this.currentRound.fontColor.hex);
-
-    // Haptic tick
-    this.vibrate(25);
-
-    // Time Attack Bonus: Har 10 correct answer pe +3 sec bonus
-    if (this.mode === GAME_MODES.TIME_ATTACK && this.correctCount % 10 === 0) {
-      this.timeRemaining += 3;
-      soundManager.playBonus();
-      this.ui.showBonusToast('+3 SEC BONUS! ⏱️');
-    }
-
-    this.ui.onScoreUpdate({
-      score: this.score,
-      streak: this.streak,
-      pointsEarned,
-      isCorrect: true
-    });
-
-    this.nextRound();
-  }
-
-  handleWrongAnswer(clickEvent, isTimeout = false) {
-    this.wrongCount++;
-    this.streak = 0;
-
-    soundManager.playWrong();
-    this.vibrate([60, 40, 60]);
-
-    if (this.mode === GAME_MODES.TIME_ATTACK) {
-      // Time Attack: -5 points
-      this.score = Math.max(0, this.score - 5);
-      this.ui.showShake();
-      this.ui.onScoreUpdate({
-        score: this.score,
-        streak: 0,
-        pointsEarned: -5,
-        isCorrect: false
-      });
-      this.nextRound();
-    } else if (this.mode === GAME_MODES.LIVES_MODE) {
-      // Lives Mode: lose a heart
-      this.lives--;
-      this.ui.showShake();
-      this.ui.onLivesUpdate(this.lives);
-
-      if (this.lives <= 0) {
-        this.gameOver(isTimeout ? 'Time ran out!' : 'Out of lives!');
+    if (endpointColor > 0) {
+      targetColor = endpointColor;
+      // If we touch an endpoint, start drawing from this endpoint.
+      // If a path already exists for this color:
+      const existing = this.playerPaths.get(targetColor) || [];
+      if (existing.length > 0) {
+        const isHead = (existing[0].r === r && existing[0].c === c);
+        const isTail = (existing[existing.length - 1].r === r && existing[existing.length - 1].c === c);
+        if (isHead) {
+          // Restart drawing from head
+          this.pushUndo();
+          initialPath = [{ r, c }];
+        } else if (isTail) {
+          // Continue or redraw from tail
+          this.pushUndo();
+          initialPath = existing.slice();
+        } else {
+          this.pushUndo();
+          initialPath = [{ r, c }];
+        }
       } else {
-        this.nextRound();
+        this.pushUndo();
+        initialPath = [{ r, c }];
       }
-    } else if (this.mode === GAME_MODES.SPEED_RUSH) {
-      // Speed rush penalty: -5 pts
-      this.score = Math.max(0, this.score - 5);
-      this.ui.showShake();
-      this.ui.onScoreUpdate({
-        score: this.score,
-        streak: 0,
-        pointsEarned: -5,
-        isCorrect: false
+    } else if (occupant) {
+      // Touching an existing pipe: pick up drag from this cell and cut everything after it
+      this.pushUndo();
+      targetColor = occupant.colorId;
+      const existing = this.playerPaths.get(targetColor);
+      initialPath = existing.slice(0, occupant.index + 1);
+    } else {
+      // Touching an empty non-endpoint cell does not start a new pipe
+      return null;
+    }
+
+    this.activeDrag = {
+      colorId: targetColor,
+      path: initialPath,
+      completedInThisDrag: false
+    };
+
+    const wasConnected = this.connectedColors.has(targetColor);
+    this.playerPaths.set(targetColor, initialPath);
+    this.updateConnections();
+
+    if (wasConnected && !this.connectedColors.has(targetColor)) {
+      this.onColorDisconnected(targetColor);
+    }
+
+    this.onCellStep(targetColor, r, c);
+    this.notifyState();
+    return this.activeDrag;
+  }
+
+  /**
+   * Continues dragging into adjacent cell (r, c)
+   */
+  continueDraw(r, c) {
+    if (!this.activeDrag || this.isCompleted || this.activeDrag.completedInThisDrag) {
+      return false;
+    }
+    if (r < 0 || r >= this.height || c < 0 || c >= this.width) {
+      return false;
+    }
+
+    const { colorId, path } = this.activeDrag;
+    const lastCell = path[path.length - 1];
+
+    // Same cell, ignore
+    if (lastCell.r === r && lastCell.c === c) {
+      return false;
+    }
+
+    // Must be orthogonally adjacent (no diagonals)
+    const dr = Math.abs(lastCell.r - r);
+    const dc = Math.abs(lastCell.c - c);
+    if (dr + dc !== 1) {
+      return false;
+    }
+
+    // Check if player is backing up to the previous cell (retract)
+    if (path.length >= 2) {
+      const prevCell = path[path.length - 2];
+      if (prevCell.r === r && prevCell.c === c) {
+        path.pop();
+        this.playerPaths.set(colorId, path);
+        this.updateConnections();
+        this.onCellStep(colorId, r, c);
+        this.notifyState();
+        return true;
+      }
+    }
+
+    // Check if cell is already in the current path (looping onto itself)
+    const existingIndex = path.findIndex(pt => pt.r === r && pt.c === c);
+    if (existingIndex !== -1) {
+      // Retract/truncate current path to this cell
+      path.splice(existingIndex + 1);
+      this.playerPaths.set(colorId, path);
+      this.updateConnections();
+      this.onCellStep(colorId, r, c);
+      this.notifyState();
+      return true;
+    }
+
+    // Check if cell is an endpoint of a DIFFERENT color -> Cannot enter!
+    const endpointColor = this.getEndpointColor(r, c);
+    if (endpointColor > 0 && endpointColor !== colorId) {
+      return false;
+    }
+
+    // Check if cell is occupied by a DIFFERENT color's path -> Cut/break the other color's path!
+    const occupant = this.getPathOccupant(r, c);
+    if (occupant && occupant.colorId !== colorId) {
+      const otherPath = this.playerPaths.get(occupant.colorId);
+      if (otherPath && otherPath.length > 0) {
+        const wasOtherConnected = this.connectedColors.has(occupant.colorId);
+        // Truncate other path before the collision point
+        const truncated = otherPath.slice(0, occupant.index);
+        this.playerPaths.set(occupant.colorId, truncated);
+        this.updateConnections();
+        this.onPipeBroken(occupant.colorId);
+        if (wasOtherConnected && !this.connectedColors.has(occupant.colorId)) {
+          this.onColorDisconnected(occupant.colorId);
+        }
+      }
+    }
+
+    // Append new cell
+    path.push({ r, c });
+    this.playerPaths.set(colorId, path);
+    this.onCellStep(colorId, r, c);
+
+    // Check if this new cell is the other endpoint of the SAME color -> Connected!
+    if (endpointColor === colorId) {
+      const endpoints = this.endpoints.get(colorId);
+      const isStartEndpoint = (endpoints[0].r === path[0].r && endpoints[0].c === path[0].c);
+      const isEndEndpoint = (endpoints[1].r === path[0].r && endpoints[1].c === path[0].c);
+
+      const hitOther = (isStartEndpoint && endpoints[1].r === r && endpoints[1].c === c) ||
+                       (isEndEndpoint && endpoints[0].r === r && endpoints[0].c === c);
+
+      if (hitOther && path.length >= 2) {
+        this.activeDrag.completedInThisDrag = true;
+        this.updateConnections();
+        this.onColorConnected(colorId);
+        this.checkWinCondition();
+        this.notifyState();
+        return true;
+      }
+    }
+
+    this.updateConnections();
+    this.notifyState();
+    return true;
+  }
+
+  /**
+   * Concludes the user's drag gesture
+   */
+  endDraw() {
+    if (!this.activeDrag) return;
+    this.moves++;
+    this.activeDrag = null;
+    this.updateConnections();
+    this.checkWinCondition();
+    this.notifyState();
+  }
+
+  /**
+   * Verifies which colors are currently properly connected
+   */
+  updateConnections() {
+    this.connectedColors.clear();
+    for (const [colorId, path] of this.playerPaths.entries()) {
+      if (path.length >= 2) {
+        const endpoints = this.endpoints.get(colorId);
+        if (!endpoints) continue;
+        const [epA, epB] = endpoints;
+        const head = path[0];
+        const tail = path[path.length - 1];
+
+        const matchForward = (head.r === epA.r && head.c === epA.c && tail.r === epB.r && tail.c === epB.c);
+        const matchBackward = (head.r === epB.r && head.c === epB.c && tail.r === epA.r && tail.c === epA.c);
+
+        if (matchForward || matchBackward) {
+          this.connectedColors.add(colorId);
+        }
+      }
+    }
+  }
+
+  /**
+   * Checks if victory condition is satisfied
+   */
+  checkWinCondition() {
+    if (this.isCompleted) return true;
+
+    // 1. All colors must be connected
+    if (this.connectedColors.size !== this.numColors) {
+      return false;
+    }
+
+    // 2. 100% board fill check (Standard rule)
+    const filledCells = this.getFilledCellsCount();
+    const totalCells = this.width * this.height;
+
+    if (filledCells === totalCells) {
+      this.isCompleted = true;
+      this.stopTimer();
+      const stars = this.calculateStars();
+      this.onLevelComplete({
+        stars,
+        moves: this.moves,
+        optimalMoves: this.numColors,
+        time: this.elapsedSeconds,
+        levelConfig: this.levelConfig
       });
-      this.nextRound();
+      return true;
     }
+
+    return false;
   }
 
-  // Grant extra life from rewarded ad
-  grantExtraLife() {
-    if (this.mode === GAME_MODES.LIVES_MODE) {
-      this.lives = Math.min(3, this.lives + 1);
-      this.ui.onLivesUpdate(this.lives);
-      soundManager.playBonus();
-      this.state = 'PLAYING';
-      this.nextRound();
-    }
-  }
-
-  // Grant extra time from rewarded ad
-  grantExtraTime() {
-    if (this.mode === GAME_MODES.TIME_ATTACK || this.mode === GAME_MODES.SPEED_RUSH) {
-      this.timeRemaining += 15;
-      soundManager.playBonus();
-      this.state = 'PLAYING';
-      this.startMainTimer();
-      this.nextRound();
-    }
-  }
-
-  // Double score from rewarded ad
-  doubleScore() {
-    this.score *= 2;
-    soundManager.playBonus();
-    particleEngine.spawnConfetti();
-    storageManager.setHighScore(this.mode, this.score);
-    this.ui.onScoreUpdate({
-      score: this.score,
-      streak: this.streak,
-      pointsEarned: 0,
-      isCorrect: true
-    });
-  }
-
-  vibrate(pattern) {
-    const settings = storageManager.getSettings();
-    if (settings.vibrationEnabled && navigator.vibrate) {
-      try {
-        navigator.vibrate(pattern);
-      } catch (e) {
-        // ignore
+  /**
+   * Count total unique cells covered by all pipes
+   */
+  getFilledCellsCount() {
+    const filled = new Set();
+    for (const path of this.playerPaths.values()) {
+      for (const pt of path) {
+        filled.add(`${pt.r},${pt.c}`);
       }
     }
+    return filled.size;
   }
 
-  gameOver(reason) {
-    this.state = 'GAMEOVER';
-    this.stopMainTimer();
-    this.stopRoundTimer();
-    soundManager.playGameOver();
+  /**
+   * Calculate star rating (1 to 3 stars)
+   */
+  calculateStars() {
+    // Optimal moves is drawing each color once without mistakes
+    const optimal = this.numColors;
+    if (this.moves <= optimal) return 3;
+    if (this.moves <= optimal + 3) return 2;
+    return 1;
+  }
 
-    // Save statistics & check high score
-    const { isNewHigh, bestStreak } = storageManager.recordGameStats({
-      mode: this.mode,
-      score: this.score,
-      correct: this.correctCount,
-      wrong: this.wrongCount,
-      streak: this.maxStreak
-    });
+  /**
+   * Apply one hint: solve one unconnected or incorrectly drawn color
+   */
+  applyHint() {
+    if (this.isCompleted) return null;
 
-    if (isNewHigh) {
-      particleEngine.spawnConfetti();
+    // Find the first unconnected color
+    let targetColor = null;
+    for (let c = 1; c <= this.numColors; c++) {
+      if (!this.connectedColors.has(c)) {
+        targetColor = c;
+        break;
+      }
     }
 
-    const currentBest = storageManager.getHighScore(this.mode);
+    if (!targetColor) {
+      // All are connected but board isn't full, find any path that doesn't match solution
+      for (let c = 1; c <= this.numColors; c++) {
+        const current = this.playerPaths.get(c) || [];
+        const sol = this.solutionPaths.get(c) || [];
+        if (current.length !== sol.length) {
+          targetColor = c;
+          break;
+        }
+      }
+    }
 
-    this.ui.onGameOver({
-      score: this.score,
-      bestScore: currentBest,
-      isNewRecord: isNewHigh,
-      correct: this.correctCount,
-      wrong: this.wrongCount,
-      maxStreak: this.maxStreak,
-      mode: this.mode,
-      reason
-    });
+    if (!targetColor) targetColor = 1;
 
-    // Check interstitial ad rules (Every 2nd game over, 90s cooldown)
-    setTimeout(() => {
-      adManager.checkAndShowInterstitial();
-    }, 1200);
+    this.pushUndo();
+    const solution = this.solutionPaths.get(targetColor);
+    if (!solution) return null;
+
+    // Remove any collision with other colors
+    const solSet = new Set(solution.map(p => `${p.r},${p.c}`));
+    for (const [otherColor, otherPath] of this.playerPaths.entries()) {
+      if (otherColor === targetColor) continue;
+      const filtered = otherPath.filter(p => !solSet.has(`${p.r},${p.c}`));
+      if (filtered.length !== otherPath.length) {
+        this.playerPaths.set(otherColor, filtered);
+      }
+    }
+
+    // Set solution for target color
+    this.playerPaths.set(targetColor, solution.map(p => ({ r: p.r, c: p.c })));
+    this.moves++;
+    this.updateConnections();
+    this.onColorConnected(targetColor);
+    this.checkWinCondition();
+    this.notifyState();
+
+    return {
+      colorId: targetColor,
+      colorInfo: getPaletteColor(targetColor),
+      path: solution
+    };
+  }
+
+  getSummary() {
+    const totalCells = this.width * this.height;
+    const filledCells = this.getFilledCellsCount();
+    const fillPercent = Math.min(100, Math.round((filledCells / totalCells) * 100));
+
+    return {
+      width: this.width,
+      height: this.height,
+      numColors: this.numColors,
+      connectedCount: this.connectedColors.size,
+      totalCells,
+      filledCells,
+      fillPercent,
+      moves: this.moves,
+      time: this.elapsedSeconds,
+      isCompleted: this.isCompleted
+    };
+  }
+
+  notifyState() {
+    this.onStateChange(this.getSummary());
   }
 }
