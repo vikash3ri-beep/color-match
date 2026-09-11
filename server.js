@@ -20,7 +20,9 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
-  '.woff2': 'font/woff2'
+  '.woff2': 'font/woff2',
+  '.apk': 'application/vnd.android.package-archive',
+  '.aab': 'application/octet-stream'
 };
 
 const server = http.createServer((req, res) => {

@@ -824,3 +824,22 @@ input:checked + .toggle-slider:before {
   0% { transform: translateY(40px); opacity: 0; }
   100% { transform: translateY(0); opacity: 1; }
 }
+
+.btn-download-apk {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #05FFA1, #00F0FF);
+  color: #000000;
+  font-weight: 800;
+  font-size: 0.95rem;
+  height: 44px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 14px rgba(5, 255, 161, 0.35);
+  transition: transform 0.1s ease;
+}
+
+.btn-download-apk:active {
+  transform: scale(0.97);
+}
