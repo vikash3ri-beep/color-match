@@ -1,5 +1,10 @@
 # 🎮 COLOR MATCH ⭐ - Android APK & Game Engine
 
+[![Live Demo](https://img.shields.io/badge/Live_Game-Play_Now-4488FF?style=for-the-badge&logo=google-chrome&logoColor=white)](https://vikash3ri-beep.github.io/color-match/)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/vikash3ri-beep/color-match)
+
+👉 **Play Live Now:** [https://vikash3ri-beep.github.io/color-match/](https://vikash3ri-beep.github.io/color-match/)
+
 Based on the **Stroop Effect** brain training phenomenon: Match the **font color** of the text, NOT the word itself!
 
 ---
